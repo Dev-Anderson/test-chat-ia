@@ -1,10 +1,5 @@
-import os
-from dotenv import load_dotenv
-from intents import Intent
-
-load_dotenv()
-
-AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").lower()
+from app.intents import Intent
+from app.settings import AI_PROVIDER, GEMINI_API_KEY
 
 def _build_prompt(user_message: str) -> str:
     return f"""
@@ -24,12 +19,17 @@ Mensagem do usuário: "{user_message}"
 def classify_intent(user_message: str) -> Intent:
     if AI_PROVIDER == "gemini":
         return classify_intent_gemini(user_message)
+
+    # (Se quiser depois eu adiciono OpenAI aqui também)
     return Intent.UNKNOWN
 
 def classify_intent_gemini(user_message: str) -> Intent:
+    if not GEMINI_API_KEY:
+        return Intent.UNKNOWN
+
     from google import genai
 
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    client = genai.Client(api_key=GEMINI_API_KEY)
     prompt = _build_prompt(user_message)
 
     response = client.models.generate_content(

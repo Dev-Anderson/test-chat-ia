@@ -1,0 +1,60 @@
+# ========= ENV / Secrets =========
+.env
+.env.*
+!.env.example
+
+# ========= Python =========
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.coverage
+coverage.xml
+htmlcov/
+*.log
+
+# ========= Virtual env =========
+.venv/
+venv/
+env/
+
+# ========= VSCode / IDE =========
+.vscode/
+.idea/
+*.iml
+
+# ========= Mac / Windows =========
+.DS_Store
+Thumbs.db
+
+# ========= Uvicorn / FastAPI =========
+*.sqlite3
+
+# ========= Alembic (se adicionar depois) =========
+alembic.ini
+alembic/versions/*.pyc
+
+# ========= Docker =========
+*.pid
+
+# ========= Postgres local files (se usar volume/backup exportado) =========
+*.dump
+*.sql
+*.backup
+
+# ========= Node (se tiver front futuramente) =========
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

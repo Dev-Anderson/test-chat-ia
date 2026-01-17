@@ -1,12 +1,13 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import time
-from models import Weekday
 
-# Planos
+from app.models import Weekday
+
+# ========= PLANS =========
 class PlanBase(BaseModel):
     name: str
-    description: Optional[str]= None
+    description: Optional[str] = None
     price: float
     active: bool = True
 
@@ -19,7 +20,7 @@ class PlanOut(PlanBase):
     class Config:
         from_attributes = True
 
-# Schedules 
+# ========= SCHEDULE =========
 class ScheduleBase(BaseModel):
     weekday: Weekday
     start_time: time

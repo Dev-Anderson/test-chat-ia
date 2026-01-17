@@ -1,9 +1,15 @@
 from sqlalchemy.orm import Session
-from models import Plan, ClassSchedule, Weekday
 
-# Planos 
+from app.models import Plan, ClassSchedule, Weekday
+
+# ========= PLANS =========
 def list_plans(db: Session):
-    return db.query(Plan).filter(Plan.active == True).order_by(Plan.price.asc()).all()
+    return (
+        db.query(Plan)
+        .filter(Plan.active == True)
+        .order_by(Plan.price.asc())
+        .all()
+    )
 
 def create_plan(db: Session, name: str, description: str | None, price: float, active: bool = True):
     p = Plan(name=name, description=description, price=price, active=active)
@@ -12,6 +18,7 @@ def create_plan(db: Session, name: str, description: str | None, price: float, a
     db.refresh(p)
     return p
 
+# ========= SCHEDULE =========
 def list_schedules(db: Session):
     return (
         db.query(ClassSchedule)
