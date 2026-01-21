@@ -10,13 +10,12 @@ const WEEKDAYS = [
   { label: "Domingo", value: "sun" },
 ];
 
-export default function App() {
-  const apiUrl = useMemo(
-    () => import.meta.env.VITE_API_URL || "http://localhost:8000",
-    []
-  );
+const LS_TOKEN_KEY = "admin_token";
+const LS_USER_KEY = "admin_user";
 
-  const [tab, setTab] = useState("chat"); // "chat" | "admin"
+export default function App() {
+  const apiUrl = useMemo(() => import.meta.env.VITE_API_URL || "http://localhost:8000", []);
+  const [tab, setTab] = useState("chat"); // chat | admin
 
   return (
     <div style={styles.page}>
@@ -96,23 +95,14 @@ function Chat({ apiUrl }) {
       if (!res.ok) throw new Error(await res.text());
 
       const data = await res.json();
-
       setChat((prev) => [
         ...prev,
-        {
-          from: "bot",
-          text: data.reply || "Sem resposta",
-          intent: data.intent || null,
-        },
+        { from: "bot", text: data.reply || "Sem resposta", intent: data.intent || null },
       ]);
     } catch (err) {
       setChat((prev) => [
         ...prev,
-        {
-          from: "bot",
-          text: "❌ Erro ao chamar a API. Confira se o backend está rodando.",
-          intent: null,
-        },
+        { from: "bot", text: "❌ Erro ao chamar a API. Confira se o backend está rodando.", intent: null },
       ]);
       console.error(err);
     } finally {
@@ -131,19 +121,8 @@ function Chat({ apiUrl }) {
     <>
       <main style={styles.chat}>
         {chat.map((msg, idx) => (
-          <div
-            key={idx}
-            style={{
-              ...styles.bubbleRow,
-              justifyContent: msg.from === "user" ? "flex-end" : "flex-start",
-            }}
-          >
-            <div
-              style={{
-                ...styles.bubble,
-                background: msg.from === "user" ? "#0b5cff" : "#111827",
-              }}
-            >
+          <div key={idx} style={{ ...styles.bubbleRow, justifyContent: msg.from === "user" ? "flex-end" : "flex-start" }}>
+            <div style={{ ...styles.bubble, background: msg.from === "user" ? "#0b5cff" : "#111827" }}>
               <div style={styles.bubbleText}>{msg.text}</div>
 
               {msg.from === "bot" && msg.intent ? (
@@ -173,7 +152,6 @@ function Chat({ apiUrl }) {
           style={styles.input}
           rows={2}
         />
-
         <button
           onClick={sendMessage}
           disabled={loading || !message.trim()}
@@ -199,35 +177,210 @@ function Chat({ apiUrl }) {
 }
 
 /* =========================================================
-   ADMIN
+   ADMIN (com Login Modal)
 ========================================================= */
 function Admin({ apiUrl }) {
-  const [section, setSection] = useState("plans"); // "plans" | "schedules"
+  const [section, setSection] = useState("plans"); // plans | schedules
+
+  const [token, setToken] = useState(() => localStorage.getItem(LS_TOKEN_KEY) || "");
+  const [adminUser, setAdminUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(LS_USER_KEY) || "null");
+    } catch {
+      return null;
+    }
+  });
+
+  const [loginOpen, setLoginOpen] = useState(() => !token);
+
+
+  // Se entrar no Admin e não estiver logado, abre modal
+  useEffect(() => {
+    if (!token) setLoginOpen(true);
+  }, [token]);
+
+  function onLoginSuccess({ access_token, user }) {
+    localStorage.setItem(LS_TOKEN_KEY, access_token);
+    localStorage.setItem(LS_USER_KEY, JSON.stringify(user));
+    setToken(access_token);
+    setAdminUser(user);
+    setLoginOpen(false);
+  }
+
+  function logout() {
+    localStorage.removeItem(LS_TOKEN_KEY);
+    localStorage.removeItem(LS_USER_KEY);
+    setToken("");
+    setAdminUser(null);
+    setLoginOpen(true);
+  }
 
   return (
     <div style={{ padding: 16, flex: 1, overflow: "auto" }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <TabButton active={section === "plans"} onClick={() => setSection("plans")}>
-          💳 Planos
-        </TabButton>
-        <TabButton
-          active={section === "schedules"}
-          onClick={() => setSection("schedules")}
-        >
-          ⏰ Horários
-        </TabButton>
+      <div style={styles.adminTopBar}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <TabButton active={section === "plans"} onClick={() => setSection("plans")}>
+            💳 Planos
+          </TabButton>
+          <TabButton active={section === "schedules"} onClick={() => setSection("schedules")}>
+            ⏰ Horários
+          </TabButton>
+        </div>
+
+        <div style={styles.adminRight}>
+          {adminUser?.email ? (
+            <div style={styles.adminUserPill}>
+              👤 <span style={styles.mono}>{adminUser.email}</span>
+            </div>
+          ) : null}
+
+          {token ? (
+            <button onClick={logout} style={styles.dangerBtn}>
+              Sair
+            </button>
+          ) : (
+            <button onClick={() => setLoginOpen(true)} style={styles.primaryBtn}>
+              Entrar
+            </button>
+          )}
+        </div>
       </div>
 
-      {section === "plans" ? (
-        <AdminPlans apiUrl={apiUrl} />
+      {!token ? (
+        <div style={styles.blockedCard}>
+          <div style={{ fontWeight: 900, marginBottom: 6 }}>🔒 Admin protegido</div>
+          <div style={{ opacity: 0.9 }}>
+            Faça login para cadastrar planos e horários.
+          </div>
+          <button onClick={() => setLoginOpen(true)} style={{ ...styles.primaryBtn, marginTop: 12 }}>
+            Fazer login
+          </button>
+        </div>
       ) : (
-        <AdminSchedules apiUrl={apiUrl} />
+        <>
+          {section === "plans" ? (
+            <AdminPlans apiUrl={apiUrl} token={token} />
+          ) : (
+            <AdminSchedules apiUrl={apiUrl} token={token} />
+          )}
+        </>
       )}
+
+      <LoginModal
+        open={loginOpen}
+        onClose={() => token && setLoginOpen(false)}
+        apiUrl={apiUrl}
+        onSuccess={onLoginSuccess}
+      />
     </div>
   );
 }
 
-function AdminPlans({ apiUrl }) {
+function LoginModal({ open, onClose, apiUrl, onSuccess }) {
+  const [email, setEmail] = useState("admin@box.com");
+  const [password, setPassword] = useState("admin123");
+  const [loading, setLoading] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      setErrMsg("");
+      setLoading(false);
+    }
+  }, [open]);
+
+  async function login(e) {
+    e.preventDefault();
+    setErrMsg("");
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${apiUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Falha no login");
+      }
+
+      onSuccess(data);
+    } catch (err) {
+      setErrMsg(err.message || "Erro no login");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div style={styles.modalOverlay} onMouseDown={onClose}>
+      <div style={styles.modalCard} onMouseDown={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}>
+          <div style={{ fontWeight: 900 }}>🔐 Login Admin</div>
+          <button onClick={onClose} style={styles.closeBtn} title="Fechar">
+            ✕
+          </button>
+        </div>
+
+        <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 12 }}>
+          Entre com email e senha para acessar o admin.
+        </div>
+
+        <form onSubmit={login} style={{ display: "grid", gap: 10 }}>
+          <label style={styles.label}>
+            Email
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={styles.input2}
+              placeholder="admin@box.com"
+              autoFocus
+            />
+          </label>
+
+          <label style={styles.label}>
+            Senha
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={styles.input2}
+              placeholder="********"
+            />
+          </label>
+
+          {errMsg ? <div style={styles.errorBox}>❌ {errMsg}</div> : null}
+
+          <button
+            style={{
+              ...styles.primaryBtn,
+              opacity: loading ? 0.7 : 1,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
+            disabled={loading}
+            type="submit"
+          >
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+
+          <div style={{ fontSize: 12, opacity: 0.75 }}>
+            * Dica: esses dados vêm do seu <span style={styles.mono}>.env</span> do backend Go (ADMIN_EMAIL/ADMIN_PASSWORD).
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   ADMIN: PLANS
+========================================================= */
+function AdminPlans({ apiUrl, token }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -241,11 +394,15 @@ function AdminPlans({ apiUrl }) {
   async function loadPlans() {
     setLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/admin/plans`);
+      const res = await fetch(`${apiUrl}/admin/plans`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.status === 401) throw new Error("Não autorizado. Faça login novamente.");
       if (!res.ok) throw new Error(await res.text());
       setPlans(await res.json());
     } catch (err) {
-      alert("Erro ao listar planos. Veja console.");
+      alert(err.message || "Erro ao listar planos. Veja console.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -268,16 +425,20 @@ function AdminPlans({ apiUrl }) {
     try {
       const res = await fetch(`${apiUrl}/admin/plans`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
 
+      if (res.status === 401) throw new Error("Não autorizado. Faça login novamente.");
       if (!res.ok) throw new Error(await res.text());
 
       setForm({ name: "", description: "", price: "", active: true });
       await loadPlans();
     } catch (err) {
-      alert("Erro ao criar plano. Veja console.");
+      alert(err.message || "Erro ao criar plano. Veja console.");
       console.error(err);
     }
   }
@@ -307,9 +468,7 @@ function AdminPlans({ apiUrl }) {
             Descrição
             <input
               value={form.description}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, description: e.target.value }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
               style={styles.input2}
               placeholder="Ex: Acesso ilimitado"
             />
@@ -330,9 +489,7 @@ function AdminPlans({ apiUrl }) {
             <input
               type="checkbox"
               checked={form.active}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, active: e.target.checked }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))}
             />
             Ativo
           </label>
@@ -385,15 +542,17 @@ function AdminPlans({ apiUrl }) {
         </div>
 
         <div style={styles.tip}>
-          💡 Dica: depois de cadastrar, volte na aba <b>Chat</b> e pergunte “quais
-          são os planos?”
+          💡 Dica: depois de cadastrar, volte na aba <b>Chat</b> e pergunte “quais são os planos?”
         </div>
       </div>
     </div>
   );
 }
 
-function AdminSchedules({ apiUrl }) {
+/* =========================================================
+   ADMIN: SCHEDULES
+========================================================= */
+function AdminSchedules({ apiUrl, token }) {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -409,11 +568,15 @@ function AdminSchedules({ apiUrl }) {
   async function loadSchedules() {
     setLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/admin/schedules`);
+      const res = await fetch(`${apiUrl}/admin/schedules`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.status === 401) throw new Error("Não autorizado. Faça login novamente.");
       if (!res.ok) throw new Error(await res.text());
       setSchedules(await res.json());
     } catch (err) {
-      alert("Erro ao listar horários. Veja console.");
+      alert(err.message || "Erro ao listar horários. Veja console.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -435,16 +598,20 @@ function AdminSchedules({ apiUrl }) {
     try {
       const res = await fetch(`${apiUrl}/admin/schedules`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
 
+      if (res.status === 401) throw new Error("Não autorizado. Faça login novamente.");
       if (!res.ok) throw new Error(await res.text());
 
       setForm((p) => ({ ...p, coach: "" }));
       await loadSchedules();
     } catch (err) {
-      alert("Erro ao criar horário. Veja console.");
+      alert(err.message || "Erro ao criar horário. Veja console.");
       console.error(err);
     }
   }
@@ -468,9 +635,7 @@ function AdminSchedules({ apiUrl }) {
             Dia da semana
             <select
               value={form.weekday}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, weekday: e.target.value }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, weekday: e.target.value }))}
               style={styles.input2}
             >
               {WEEKDAYS.map((w) => (
@@ -487,9 +652,7 @@ function AdminSchedules({ apiUrl }) {
               <input
                 type="time"
                 value={form.start_time}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, start_time: e.target.value }))
-                }
+                onChange={(e) => setForm((p) => ({ ...p, start_time: e.target.value }))}
                 style={styles.input2}
               />
             </label>
@@ -499,9 +662,7 @@ function AdminSchedules({ apiUrl }) {
               <input
                 type="time"
                 value={form.end_time}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, end_time: e.target.value }))
-                }
+                onChange={(e) => setForm((p) => ({ ...p, end_time: e.target.value }))}
                 style={styles.input2}
               />
             </label>
@@ -511,9 +672,7 @@ function AdminSchedules({ apiUrl }) {
             Modalidade
             <input
               value={form.modality}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, modality: e.target.value }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, modality: e.target.value }))}
               style={styles.input2}
               placeholder="Ex: CrossFit"
             />
@@ -533,9 +692,7 @@ function AdminSchedules({ apiUrl }) {
             <input
               type="checkbox"
               checked={form.active}
-              onChange={(e) =>
-                setForm((p) => ({ ...p, active: e.target.checked }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))}
             />
             Ativo
           </label>
@@ -549,11 +706,7 @@ function AdminSchedules({ apiUrl }) {
       <div style={styles.card}>
         <div style={styles.cardTitle}>
           Horários cadastrados{" "}
-          <button
-            onClick={loadSchedules}
-            style={styles.smallBtn}
-            disabled={loading}
-          >
+          <button onClick={loadSchedules} style={styles.smallBtn} disabled={loading}>
             {loading ? "Atualizando..." : "Atualizar"}
           </button>
         </div>
@@ -578,9 +731,7 @@ function AdminSchedules({ apiUrl }) {
                     <td style={styles.td}>{s.id}</td>
                     <td style={styles.td}>{weekdayLabel(s.weekday)}</td>
                     <td style={styles.td}>{s.start_time?.slice(0, 5)}</td>
-                    <td style={styles.td}>
-                      {s.end_time ? s.end_time.slice(0, 5) : "-"}
-                    </td>
+                    <td style={styles.td}>{s.end_time ? s.end_time.slice(0, 5) : "-"}</td>
                     <td style={styles.td}>{s.modality || "-"}</td>
                     <td style={styles.td}>{s.coach || "-"}</td>
                     <td style={styles.td}>{s.active ? "✅" : "❌"}</td>
@@ -598,8 +749,7 @@ function AdminSchedules({ apiUrl }) {
         </div>
 
         <div style={styles.tip}>
-          💡 Dica: depois de cadastrar, volte na aba <b>Chat</b> e pergunte
-          “quais são os horários?”
+          💡 Dica: depois de cadastrar, volte na aba <b>Chat</b> e pergunte “quais são os horários?”
         </div>
       </div>
     </div>
@@ -638,7 +788,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "space-between",
   },
-  title: { fontSize: 18, fontWeight: 800 },
+  title: { fontSize: 18, fontWeight: 900 },
   subtitle: { fontSize: 12, opacity: 0.8, marginTop: 4 },
   tabBtn: {
     fontSize: 13,
@@ -693,7 +843,7 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.10)",
     background: "#0b5cff",
     color: "white",
-    fontWeight: 800,
+    fontWeight: 900,
   },
   hints: {
     padding: "10px 16px 14px",
@@ -712,6 +862,29 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.08)",
   },
 
+  adminTopBar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  adminRight: { display: "flex", gap: 8, alignItems: "center" },
+  adminUserPill: {
+    fontSize: 12,
+    padding: "7px 10px",
+    borderRadius: 999,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.10)",
+  },
+  blockedCard: {
+    background: "#0b1220",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 14,
+    padding: 14,
+  },
+
   adminGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1.4fr",
@@ -725,7 +898,7 @@ const styles = {
   },
   cardTitle: {
     fontSize: 14,
-    fontWeight: 800,
+    fontWeight: 900,
     marginBottom: 10,
     display: "flex",
     alignItems: "center",
@@ -747,7 +920,16 @@ const styles = {
     border: "1px solid rgba(11,92,255,0.35)",
     background: "rgba(11,92,255,0.18)",
     color: "#fff",
-    fontWeight: 800,
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  dangerBtn: {
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255, 90, 90, 0.35)",
+    background: "rgba(255, 90, 90, 0.16)",
+    color: "#fff",
+    fontWeight: 900,
     cursor: "pointer",
   },
   smallBtn: {
@@ -789,5 +971,48 @@ const styles = {
     background: "rgba(255,255,255,0.04)",
     border: "1px solid rgba(255,255,255,0.06)",
   },
+
+  // Modal
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.65)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+    zIndex: 999,
+  },
+  modalCard: {
+    width: "min(520px, 100%)",
+    background: "#0f172a",
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 16,
+    padding: 14,
+    boxShadow: "0 20px 70px rgba(0,0,0,0.55)",
+  },
+  modalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  closeBtn: {
+    background: "transparent",
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 10,
+    padding: "6px 10px",
+    cursor: "pointer",
+    color: "#fff",
+    fontWeight: 900,
+  },
+  errorBox: {
+    padding: 10,
+    borderRadius: 12,
+    border: "1px solid rgba(255, 90, 90, 0.35)",
+    background: "rgba(255, 90, 90, 0.14)",
+    fontSize: 13,
+  },
+
   mono: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" },
 };

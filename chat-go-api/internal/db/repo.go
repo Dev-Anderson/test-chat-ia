@@ -32,6 +32,15 @@ func (r *Repo) EnsureTables(ctx context.Context) error {
 			active BOOLEAN DEFAULT TRUE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_class_schedules_weekday ON class_schedules(weekday);`,
+		`CREATE TABLE IF NOT EXISTS users (
+			id SERIAL PRIMARY KEY,
+			email VARCHAR(150) UNIQUE NOT NULL,
+			pass_hash TEXT NOT NULL,
+			role VARCHAR(30) NOT NULL DEFAULT 'admin',
+			active BOOLEAN DEFAULT TRUE,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW()
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`,
 	}
 
 	for _, q := range queries {
@@ -123,6 +132,36 @@ func (r *Repo) CreateSchedule(
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
 	`, weekday, start, endTime, modality, coach, active).Scan(&id)
+
+	return id, err
+}
+
+func (r *Repo) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	var u User
+	err := r.db.QueryRowContext(ctx, `
+		SELECT id, email, pass_hash, role, active, created_at
+		FROM users 
+		where email = $1
+		LIMIT 1 
+	`, email).Scan(&u.ID, &u.Email, &u.PassHas, &u.Role, &u.Active, &u.CreatedAt)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &u, nil
+}
+
+func (r *Repo) CreateUser(ctx context.Context, email, passHash, role string) (int64, error) {
+	var id int64
+	err := r.db.QueryRowContext(ctx, `
+		INSERT INTO users (email, pass_hash, role, active)
+		VALUES($1, $2, $3, TRUE)
+		RETURNING id
+	`, email, passHash, role).Scan(&id)
 
 	return id, err
 }

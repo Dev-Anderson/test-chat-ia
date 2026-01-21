@@ -21,3 +21,12 @@ type Schedule struct {
 	Coach     *string    `json:"coach"`
 	Active    bool       `json:"active"`
 }
+
+type User struct {
+	ID        int64     `json:"id"`
+	Email     string    `json:"email"`
+	PassHas   string    `json:"password"` //nunca retornar
+	Role      string    `json:"role"`
+	Active    bool      `json:"active"`
+	CreatedAt time.Time `json:"created_at"`
+}
